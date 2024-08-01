@@ -21,35 +21,27 @@ type token interface {
 	ToString(padding string) string
 }
 
-type TokenLiteral struct{ rune }
+type TokenLiteral struct{ byte }
 
 func (t TokenLiteral) getType() tokenType { return literal }
 func (t TokenLiteral) ToString(padding string) string {
-	return fmt.Sprintf("%v[Literal] %c", padding, t.rune)
+	return fmt.Sprintf("%v[Literal] %c", padding, t.byte)
 }
 
-type TokenGroupCaptured struct {
-	tokens []token
+type TokenGroup struct {
+	capture bool
+	tokens  []token
 }
 
-func (t TokenGroupCaptured) getType() tokenType { return groupCaptured }
-func (t TokenGroupCaptured) ToString(padding string) string {
-	var sb strings.Builder
-	sb.WriteString(padding + "[GroupCaptured]")
-	for _, token := range t.tokens {
-		sb.WriteString("\n" + token.ToString(padding+"    "))
+func (t TokenGroup) getType() tokenType { 
+	if t.capture {
+		return groupCaptured
 	}
-	return sb.String()
+	return groupUncaptured
 }
-
-type TokenGroupUncaptured struct {
-	tokens []token
-}
-
-func (t TokenGroupUncaptured) getType() tokenType { return groupUncaptured }
-func (t TokenGroupUncaptured) ToString(padding string) string {
+func (t TokenGroup) ToString(padding string) string {
 	var sb strings.Builder
-	sb.WriteString(padding + "[GroupUncaptured]")
+	sb.WriteString(padding + fmt.Sprintf("[Group Capture=%v]", t.capture))
 	for _, token := range t.tokens {
 		sb.WriteString("\n" + token.ToString(padding+"    "))
 	}
@@ -65,25 +57,46 @@ type TokenCharset struct {
 
 func (t TokenCharset) getType() tokenType { return charset }
 
+type TokenCharsetCompound struct {
+	*TokenCharset
+	testers []interfaceCharset
+}
 
-type TokenCharsetAny struct{*TokenCharset}
-func (t TokenCharsetAny) Test(b byte) bool               { return true }
-func (t TokenCharsetAny) ToString(padding string) string { return padding + "[Charset] Wildcard" }
+func (t TokenCharsetCompound) Test(b byte) bool {
+	for _, tester := range t.testers {
+		if tester.Test(b) {
+			return true
+		}
+	}
+	return false
+}
+func (t TokenCharsetCompound) ToString(padding string) string {
+	var sb strings.Builder
+	sb.WriteString(padding + "[Charset] Compound")
+	for _, tester := range t.testers {
+		sb.WriteString("\n" + tester.ToString(padding+"    "))
+	}
+	return sb.String()
+}
 
-type TokenCharsetRange struct{
+type TokenCharsetRange struct {
 	*TokenCharset
 	min byte
 	max byte
 }
-func (t TokenCharsetRange) Test(b byte) bool               { return b >= t.min && b <= t.max }
-func (t TokenCharsetRange) ToString(padding string) string { return padding + fmt.Sprintf("[Charset] %c - %c", t.min, t.max) }
+
+func (t TokenCharsetRange) Test(b byte) bool { return b >= t.min && b <= t.max }
+func (t TokenCharsetRange) ToString(padding string) string {
+	return padding + fmt.Sprintf("[Charset] %c - %c", t.min, t.max)
+}
 
 type TokenCharsetNot struct {
 	*TokenCharset
 	tester interfaceCharset
 }
-func (t TokenCharsetNot) Test(b byte) bool               { return !t.tester.Test(b) }
-func (t TokenCharsetNot) ToString(padding string) string { 
+
+func (t TokenCharsetNot) Test(b byte) bool { return !t.tester.Test(b) }
+func (t TokenCharsetNot) ToString(padding string) string {
 
 	return padding + "[Charset] Not\n" + t.tester.ToString(padding+"    ")
 }

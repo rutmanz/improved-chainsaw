@@ -4,46 +4,47 @@ import (
 	"strconv"
 )
 
-func (c *Context) process() {
+func (c *Context) parseNext() {
 	input := c.getRegex()
 	// fmt.Println(input)
 	// fmt.Println(strings.Repeat(" ", c.index) + "^")
 	switch input[c.index] {
 	case '(':
-		c.processGroup()
+		c.parseGroup()
 	case '[':
-		c.processCharset()
+		c.parseCharset()
 	case '|':
-		c.processAlternation()
+		c.parseAlternation()
 	case '?':
-		c.processShorthandQuantifier(0, 1)
+		c.parseShorthandQuantifier(0, 1)
 	case '*':
-		c.processShorthandQuantifier(0, -1)
+		c.parseShorthandQuantifier(0, -1)
 	case '+':
-		c.processShorthandQuantifier(1, -1)
+		c.parseShorthandQuantifier(1, -1)
 	case '{':
-		c.processExplicitQuantifier()
+		c.parseExplicitQuantifier()
 	case '.':
-		c.push(TokenCharsetAny{})
+		c.push(charsetAny)
 	case '\\':
-		c.processEscape()
+		c.parseEscape()
 	default:
-		c.push(TokenLiteral{rune(input[c.index])})
-	
+		c.push(TokenLiteral{input[c.index]})
+
 	}
 }
 
 var (
 	// Charsets
-	charsetDigits interfaceCharset = TokenCharsetRange{nil, '0', '9'}
-	charsetNotDigits interfaceCharset = TokenCharsetNot{nil, charsetDigits}
-	charsetWhitespace interfaceCharset = TokenCharsetLiterals{nil, map[byte]struct{}{'\t': {}, '\n': {}, '\v': {}, '\f': {}, '\r': {}, ' ': {}}}
+	charsetDigits        interfaceCharset = TokenCharsetRange{nil, '0', '9'}
+	charsetNotDigits     interfaceCharset = TokenCharsetNot{nil, charsetDigits}
+	charsetWhitespace    interfaceCharset = TokenCharsetLiterals{nil, map[byte]struct{}{'\t': {}, '\n': {}, '\v': {}, '\f': {}, '\r': {}, ' ': {}}}
 	charsetNotWhitespace interfaceCharset = TokenCharsetNot{nil, charsetWhitespace}
-	charsetWord interfaceCharset = TokenCharsetLiterals{nil, map[byte]struct{}{'0': {}, '1': {}, '2': {}, '3': {}, '4': {}, '5': {}, '6': {}, '7': {}, '8': {}, '9': {}, 'a': {}, 'b': {}, 'c': {}, 'd': {}, 'e': {}, 'f': {}, 'g': {}, 'h': {}, 'i': {}, 'j': {}, 'k': {}, 'l': {}, 'm': {}, 'n': {}, 'o': {}, 'p': {}, 'q': {}, 'r': {}, 's': {}, 't': {}, 'u': {}, 'v': {}, 'w': {}, 'x': {}, 'y': {}, 'z': {}, 'A': {}, 'B': {}, 'C': {}, 'D': {}, 'E': {}, 'F': {}, 'G': {}, 'H': {}, 'I': {}, 'J': {}, 'K': {}, 'L': {}, 'M': {}, 'N': {}, 'O': {}, 'P': {}, 'Q': {}, 'R': {}, 'S': {}, 'T': {}, 'U': {}, 'V': {}, 'W': {}, 'X': {}, 'Y': {}, 'Z': {}}}
-	charsetNotWord interfaceCharset = TokenCharsetNot{nil, charsetWord}
+	charsetWord          interfaceCharset = TokenCharsetCompound{nil, []interfaceCharset{charsetDigits, TokenCharsetRange{nil, 'a', 'z'}, TokenCharsetRange{nil, 'A', 'Z'}, TokenCharsetLiterals{nil, map[byte]struct{}{'_': {}}}}}
+	charsetNotWord       interfaceCharset = TokenCharsetNot{nil, charsetWord}
+	charsetAny           interfaceCharset = TokenCharsetRange{nil, 0x00, 0xFF}
 )
 
-func (c *Context) processEscape() {
+func (c *Context) parseEscape() {
 	input := c.getRegex()
 	c.index++
 	switch input[c.index] {
@@ -60,26 +61,27 @@ func (c *Context) processEscape() {
 	case 'W':
 		c.push(charsetNotWord)
 	default:
-		c.push(TokenLiteral{rune(input[c.index])})
+		c.push(TokenLiteral{input[c.index]})
 	}
 }
 
-func (c *Context) processGroup() {
+func (c *Context) parseGroup() {
 	groupCtx := &Context{index: c.index + 1, regex: c.regex, Tokens: make([]token, 0, len(c.regex))}
 	for c.regex[groupCtx.index] != ')' {
-		groupCtx.process()
+		groupCtx.parseNext()
 		groupCtx.index++
 	}
 	c.index = groupCtx.index
-	c.push(TokenGroupCaptured{groupCtx.Tokens})
+	c.push(TokenGroup{true, groupCtx.Tokens})
 }
 
 type charitem struct {
-	start byte
-	end   byte
+	start  byte
+	end    byte
+	hasEnd bool
 }
 
-func (c *Context) processCharset() {
+func (c *Context) parseCharset() {
 	input := c.getRegex()
 	items := make([]charitem, 0)
 	c.index++
@@ -87,6 +89,7 @@ func (c *Context) processCharset() {
 		switch input[c.index] {
 		case '-':
 			items[len(items)-1].end = input[c.index+1]
+			items[len(items)-1].hasEnd = true
 			c.index++
 		default:
 			items = append(items, charitem{start: input[c.index]})
@@ -95,7 +98,7 @@ func (c *Context) processCharset() {
 	}
 	charSet := make(map[byte]struct{})
 	for _, item := range items {
-		if item.end == 0x00 {
+		if !item.hasEnd {
 			charSet[item.start] = struct{}{}
 		} else {
 			for i := item.start; i <= item.end; i++ {
@@ -106,23 +109,23 @@ func (c *Context) processCharset() {
 	c.push(TokenCharsetLiterals{nil, charSet})
 }
 
-func (c *Context) processAlternation() {
+func (c *Context) parseAlternation() {
 	input := c.getRegex()
 	rightSideContext := &Context{index: c.index + 1, regex: c.regex, Tokens: make([]token, 0)}
 	for rightSideContext.index < len(input) && input[rightSideContext.index] != ')' {
-		rightSideContext.process()
+		rightSideContext.parseNext()
 		rightSideContext.index++
 	}
 
-	leftToken := TokenGroupUncaptured{c.Tokens} // All existing tokens in current context are on the left side of the alternation
-	rightToken := TokenGroupUncaptured{rightSideContext.Tokens}
+	leftToken := TokenGroup{false, c.Tokens} // All existing tokens in current context are on the left side of the alternation
+	rightToken := TokenGroup{false, rightSideContext.Tokens}
 
 	c.index = rightSideContext.index - 1       // -1 because the group will increment the index
 	c.Tokens = make([]token, 0, cap(c.Tokens)) // Clear old tokens
 	c.push(TokenAlternate{leftToken, rightToken})
 }
 
-func (c *Context) processShorthandQuantifier(min int, max int) {
+func (c *Context) parseShorthandQuantifier(min int, max int) {
 	prevToken := c.Tokens[len(c.Tokens)-1]
 	c.Tokens[len(c.Tokens)-1] = TokenQuantifier{ // Replace the last token with a quantifier
 		min:   min,
@@ -131,7 +134,7 @@ func (c *Context) processShorthandQuantifier(min int, max int) {
 	}
 }
 
-func (c *Context) processExplicitQuantifier() {
+func (c *Context) parseExplicitQuantifier() {
 	input := c.getRegex()
 	var min, max int
 	var minChars, maxChars []byte = make([]byte, 0), make([]byte, 0)
@@ -166,5 +169,5 @@ func (c *Context) processExplicitQuantifier() {
 			max, _ = strconv.Atoi(string(maxChars))
 		}
 	}
-	c.processShorthandQuantifier(min, max)
+	c.parseShorthandQuantifier(min, max)
 }
