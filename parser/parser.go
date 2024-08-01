@@ -35,7 +35,7 @@ type matchStep struct {
 }
 
 func (m matchStep) String() string {
-	return fmt.Sprintf("%v %v", m.index, m.state)
+	return fmt.Sprintf("[%v] %v", m.index, m.state)
 }
 
 func newMatchStep(index int, state *nfaState) *matchStep {
@@ -45,30 +45,38 @@ func newMatchStep(index int, state *nfaState) *matchStep {
 func Match(regex, input string) bool {
 	ctx := Parse(regex)
 	startNFA := ctx.toNFA()
-
+	// fmt.Println(startNFA)
 	currentSteps := []*matchStep{newMatchStep(0, startNFA)}
 	for len(currentSteps) != 0 {
-		fmt.Println(currentSteps)
 		nextSteps := make([]*matchStep, 0)
+
 		for _, step := range currentSteps {
-			if step.state.transitions[input[step.index]] != nil {
-				for _, s := range step.state.transitions[input[step.index]] {
-					if s.isEnd {
-						return true
+			if step.state.isEnd {
+				return true
+			}
+
+			for _, transition := range step.state.transitions {
+				var passes bool
+				if transition.consumes {
+					if step.index < len(input) {
+						passes = transition.test(input[step.index])
+					} else {
+						continue
 					}
-					if step.index+1 < len(input) {
-						nextSteps = append(nextSteps, newMatchStep(step.index+1, s))
+				} else {
+					passes = true
+				}
+				if passes {
+					// fmt.Println("========"+input[step.index:]+"========")
+					// fmt.Println(transition.state.ToString(""))
+					if transition.consumes {
+						nextSteps = append(nextSteps, newMatchStep(step.index+1, transition.state))
+					} else {
+						nextSteps = append(nextSteps, newMatchStep(step.index, transition.state))
 					}
 				}
 			}
-			if step.state.transitions[empty] != nil {
-				for _, s := range step.state.transitions[empty] {
-					if s.isEnd {
-						return true
-					}
-					nextSteps = append(nextSteps, newMatchStep(step.index, s))
-				}
-			}
+
 		}
 		currentSteps = nextSteps
 	}

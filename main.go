@@ -7,6 +7,5 @@ import (
 )
 
 func main() {
-	fmt.Println(parser.Match("a", "a"))
-
+	fmt.Printf("\nMATCH: %t\n", parser.Match("(a|b)c", "bc"))
 }

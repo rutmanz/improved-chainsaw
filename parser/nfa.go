@@ -2,51 +2,77 @@ package parser
 
 import (
 	"fmt"
+	"strings"
 )
 
-type nfaTransitions = map[byte][]*nfaState
+type nfaTransition struct {
+	test     func(byte) (passes bool)
+	consumes bool
+	state    *nfaState
+	label    string
+}
+
+func (n *nfaTransition) ToString(padding string) string {
+	var sb strings.Builder
+	sb.WriteString(padding + fmt.Sprintf("%-5v", "{"+n.label+"}"))
+	sb.WriteString(n.state.ToString(padding))
+	return sb.String()
+}
+
 type nfaState struct {
 	isStart     bool
 	isEnd       bool
-	transitions nfaTransitions
+	transitions []*nfaTransition
 }
 
 func (n *nfaState) ToString(padding string) string {
-	return fmt.Sprintf("%v", n.transitions)
+	var sb strings.Builder
+	sb.WriteString(padding + fmt.Sprintf("[State] Start=%t End=%t", n.isStart, n.isEnd))
+	if len(n.transitions) == 1 {
+		sb.WriteString("\n" + n.transitions[0].ToString(padding+"  "))
+	} else {
+		for _, transition := range n.transitions {
+			sb.WriteString("\n" + transition.ToString(padding+"  "))
+		}
+	}
+	return sb.String()
+}
+
+func (n *nfaState) String() string {
+	return n.ToString("")
 }
 
 func newNfaState() *nfaState {
-	return &nfaState{transitions: make(nfaTransitions)}
+	return &nfaState{transitions: make([]*nfaTransition, 0)}
 }
 
-func (n *nfaState) addTransition(char byte, states ...*nfaState) {
-	if n.transitions[char] == nil {
-		n.transitions[char] = make([]*nfaState, 0)
+func (n *nfaState) addEpsilonTransition(states ...*nfaState) {
+	for _, state := range states {
+		n.transitions = append(n.transitions, &nfaTransition{func(b byte) bool { return true }, false, state, "*"})
 	}
-	n.transitions[char] = append(n.transitions[char], states...)
 }
-func (n *nfaState) setTransitions(char byte, states ...*nfaState) {
-	n.transitions[char] = states
+func (n *nfaState) addTransition(label string, test func(byte) bool, consumes bool, states ...*nfaState) {
+	for _, state := range states {
+		n.transitions = append(n.transitions, &nfaTransition{test, consumes, state, label})
+	}
 }
-
-const empty byte = 0
 
 func (c *Context) toNFA() *nfaState {
 	currStart, currEnd := toStates(c.Tokens[0])
 	for i := 1; i < len(c.Tokens); i++ {
 		nextStart, nextEnd := toStates(c.Tokens[i])
-		currEnd.addTransition(empty, nextStart)
+		currEnd.addEpsilonTransition(nextStart)
 		currEnd = nextEnd
 	}
 
 	start := newNfaState()
-	start.addTransition(empty, currStart)
+	start.addEpsilonTransition(currStart)
 	start.isStart = true
 
 	end := newNfaState()
 	end.isEnd = true
 
-	currEnd.addTransition(empty, end)
+	currEnd.addEpsilonTransition(end)
 
 	return start
 }
@@ -60,23 +86,31 @@ func toStates(t token) (start *nfaState, end *nfaState) {
 		start, end = toStates(t.tokens[0])
 		for i := 1; i < len(t.tokens); i++ {
 			nextStart, nextEnd := toStates(t.tokens[i])
-			end.addTransition(empty, nextStart)
+			end.addEpsilonTransition(nextStart)
 			end = nextEnd
 		}
 	case alternate:
 		t := t.(TokenAlternate)
 		startA, endA := toStates(t.a)
 		startB, endB := toStates(t.b)
-		start.setTransitions(empty, startA, startB)
-		endA.setTransitions(empty, end)
-		endB.setTransitions(empty, end)
+		start.addEpsilonTransition(startA, startB)
+		endA.addEpsilonTransition(end)
+		endB.addEpsilonTransition(end)
 	case literal:
 		t := t.(TokenLiteral)
-		start.setTransitions(t.byte, end)
+		start.addTransition(fmt.Sprintf("<%c>", t.byte), func(b byte) bool { return b == t.byte }, true, end)
 	case charset:
-		// t := t.(interfaceCharset)
+		t := t.(interfaceCharset)
+		start.addTransition(fmt.Sprintf("<%v>", t.ToString("")), t.Test, true, end)
 	case quantifier:
 		// t := t.(TokenQuantifier)
+		// if t.min == 0 {
+		// 	start.addEpsilonTransition(end)
+		// }
+		// if (t.max == -1) {
+		// 	end.addEpsilonTransition(start)
+		// }
+		// for i := 0; i < t.min; i++ {
 
 	default:
 		panic("Unknown token type")

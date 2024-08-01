@@ -35,13 +35,13 @@ func (c *Context) parseNext() {
 
 var (
 	// Charsets
-	charsetDigits        interfaceCharset = TokenCharsetRange{nil, '0', '9'}
-	charsetNotDigits     interfaceCharset = TokenCharsetNot{nil, charsetDigits}
-	charsetWhitespace    interfaceCharset = TokenCharsetLiterals{nil, map[byte]struct{}{'\t': {}, '\n': {}, '\v': {}, '\f': {}, '\r': {}, ' ': {}}}
-	charsetNotWhitespace interfaceCharset = TokenCharsetNot{nil, charsetWhitespace}
-	charsetWord          interfaceCharset = TokenCharsetCompound{nil, []interfaceCharset{charsetDigits, TokenCharsetRange{nil, 'a', 'z'}, TokenCharsetRange{nil, 'A', 'Z'}, TokenCharsetLiterals{nil, map[byte]struct{}{'_': {}}}}}
-	charsetNotWord       interfaceCharset = TokenCharsetNot{nil, charsetWord}
-	charsetAny           interfaceCharset = TokenCharsetRange{nil, 0x00, 0xFF}
+	charsetDigits        interfaceCharset = TokenCharsetRange{&TokenCharset{}, '0', '9'}
+	charsetNotDigits     interfaceCharset = TokenCharsetNot{&TokenCharset{}, charsetDigits}
+	charsetWhitespace    interfaceCharset = TokenCharsetLiterals{&TokenCharset{}, map[byte]struct{}{'\t': {}, '\n': {}, '\v': {}, '\f': {}, '\r': {}, ' ': {}}}
+	charsetNotWhitespace interfaceCharset = TokenCharsetNot{&TokenCharset{}, charsetWhitespace}
+	charsetWord          interfaceCharset = TokenCharsetCompound{&TokenCharset{}, []interfaceCharset{charsetDigits, TokenCharsetRange{&TokenCharset{}, 'a', 'z'}, TokenCharsetRange{&TokenCharset{}, 'A', 'Z'}, TokenCharsetLiterals{&TokenCharset{}, map[byte]struct{}{'_': {}}}}}
+	charsetNotWord       interfaceCharset = TokenCharsetNot{&TokenCharset{}, charsetWord}
+	charsetAny           interfaceCharset = TokenCharsetRange{&TokenCharset{}, 0x00, 0xFF}
 )
 
 func (c *Context) parseEscape() {
@@ -106,7 +106,7 @@ func (c *Context) parseCharset() {
 			}
 		}
 	}
-	c.push(TokenCharsetLiterals{nil, charSet})
+	c.push(TokenCharsetLiterals{&TokenCharset{}, charSet})
 }
 
 func (c *Context) parseAlternation() {
