@@ -1,8 +1,7 @@
 package parser
 
 type Context struct {
-	parent *Context
-	regex  *string
+	regex  string
 	index  int
 	Tokens []token
 }
@@ -12,10 +11,7 @@ func (c *Context) push(token token) {
 }
 
 func (c *Context) getRegex() string {
-	if c.regex == nil {
-		return c.parent.getRegex()
-	}
-	return *c.regex
+	return c.regex
 }
 
 
@@ -23,8 +19,7 @@ func (c *Context) getRegex() string {
 func Parse(regex string) *Context {
 	context := &Context{
 		index:  0,
-		parent: nil,
-		regex:  &regex,
+		regex:  regex,
 		Tokens: make([]token, 0, len(regex)),
 	}
 	for context.index < len(regex) {

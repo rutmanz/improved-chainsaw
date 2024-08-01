@@ -7,9 +7,9 @@ import (
 )
 
 func main() {
-	ctx := parser.Parse("3(a|b)(bc[a-x])d")
+	ctx := parser.Parse("3(a|b)+\\.{2,5}d")
 	for _, token := range ctx.Tokens {
-		fmt.Println(token.ToString())
+		fmt.Println(token.ToString(""))
 	}
 
 }
