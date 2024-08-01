@@ -103,14 +103,33 @@ func toStates(t token) (start *nfaState, end *nfaState) {
 		t := t.(interfaceCharset)
 		start.addTransition(fmt.Sprintf("<%v>", t.ToString("")), t.Test, true, end)
 	case quantifier:
-		// t := t.(TokenQuantifier)
-		// if t.min == 0 {
-		// 	start.addEpsilonTransition(end)
-		// }
-		// if (t.max == -1) {
-		// 	end.addEpsilonTransition(start)
-		// }
-		// for i := 0; i < t.min; i++ {
+		t := t.(TokenQuantifier)
+		if t.min == 0 {
+			start.addEpsilonTransition(end)
+		}
+		instances := t.min
+		if t.max == -1 {
+			if t.min == 0 {
+				instances = 1
+			}
+		} else {
+			instances = t.max
+		}
+		tStart, tEnd := toStates(t.token)
+		start.addEpsilonTransition(tStart)
+		for i := 2; i <= instances; i++ {
+			iterStart, iterEnd := toStates(t.token)
+			tEnd.addEpsilonTransition(iterStart)
+			tEnd = iterEnd
+			tStart = iterStart
+			if i > t.min {
+				iterStart.addEpsilonTransition(end)
+			}
+		}
+		tEnd.addEpsilonTransition(end)
+		if t.max == -1 {
+			end.addEpsilonTransition(tStart)
+		}
 
 	default:
 		panic("Unknown token type")

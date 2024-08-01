@@ -33,15 +33,23 @@ func (c *Context) parseNext() {
 	}
 }
 
+func createCharsetLiterals(chars ...byte) TokenCharsetLiterals {
+	charSet := make(map[byte]struct{}, len(chars))
+	for _, char := range chars {
+		charSet[char] = struct{}{}
+	}
+	return TokenCharsetLiterals{&TokenCharset{}, charSet}
+}
+
 var (
 	// Charsets
 	charsetDigits        interfaceCharset = TokenCharsetRange{&TokenCharset{}, '0', '9'}
 	charsetNotDigits     interfaceCharset = TokenCharsetNot{&TokenCharset{}, charsetDigits}
-	charsetWhitespace    interfaceCharset = TokenCharsetLiterals{&TokenCharset{}, map[byte]struct{}{'\t': {}, '\n': {}, '\v': {}, '\f': {}, '\r': {}, ' ': {}}}
+	charsetWhitespace    interfaceCharset = createCharsetLiterals('\f', '\n', '\r', '\t', '\v', '\u0020', '\u00A0')
 	charsetNotWhitespace interfaceCharset = TokenCharsetNot{&TokenCharset{}, charsetWhitespace}
 	charsetWord          interfaceCharset = TokenCharsetCompound{&TokenCharset{}, []interfaceCharset{charsetDigits, TokenCharsetRange{&TokenCharset{}, 'a', 'z'}, TokenCharsetRange{&TokenCharset{}, 'A', 'Z'}, TokenCharsetLiterals{&TokenCharset{}, map[byte]struct{}{'_': {}}}}}
 	charsetNotWord       interfaceCharset = TokenCharsetNot{&TokenCharset{}, charsetWord}
-	charsetAny           interfaceCharset = TokenCharsetRange{&TokenCharset{}, 0x00, 0xFF}
+	charsetAny           interfaceCharset = TokenCharsetNot{&TokenCharset{}, createCharsetLiterals('\n', '\r')}
 )
 
 func (c *Context) parseEscape() {
@@ -83,30 +91,25 @@ type charitem struct {
 
 func (c *Context) parseCharset() {
 	input := c.getRegex()
-	items := make([]charitem, 0)
+	items := make([]interfaceCharset, 0)
+	literals := make([]byte, 0)
 	c.index++
 	for input[c.index] != ']' {
 		switch input[c.index] {
 		case '-':
-			items[len(items)-1].end = input[c.index+1]
-			items[len(items)-1].hasEnd = true
+			start := literals[len(literals)-1]
+			literals = literals[:len(literals)-1]
+			items = append(items,TokenCharsetRange{&TokenCharset{}, start, input[c.index+1]})
 			c.index++
 		default:
-			items = append(items, charitem{start: input[c.index]})
+			literals = append(literals, input[c.index])
 			c.index++
 		}
 	}
-	charSet := make(map[byte]struct{})
-	for _, item := range items {
-		if !item.hasEnd {
-			charSet[item.start] = struct{}{}
-		} else {
-			for i := item.start; i <= item.end; i++ {
-				charSet[i] = struct{}{}
-			}
-		}
+	if (len(literals) > 0) {
+		items = append(items, createCharsetLiterals(literals...))
 	}
-	c.push(TokenCharsetLiterals{&TokenCharset{}, charSet})
+	c.push(TokenCharsetCompound{&TokenCharset{}, items})
 }
 
 func (c *Context) parseAlternation() {
@@ -139,6 +142,7 @@ func (c *Context) parseExplicitQuantifier() {
 	var min, max int
 	var minChars, maxChars []byte = make([]byte, 0), make([]byte, 0)
 	hasFoundComma := false
+	origIndex := c.index
 	c.index++
 	for input[c.index] != '}' {
 		if input[c.index] == ',' {
@@ -159,7 +163,7 @@ func (c *Context) parseExplicitQuantifier() {
 		max = min
 	} else {
 		if len(minChars) == 0 {
-			min = 0
+			panic("Invalid quantifier " + input[origIndex:c.index+1])
 		} else {
 			min, _ = strconv.Atoi(string(minChars))
 		}

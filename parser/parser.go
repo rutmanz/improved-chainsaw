@@ -43,15 +43,17 @@ func newMatchStep(index int, state *nfaState) *matchStep {
 }
 
 func Match(regex, input string) bool {
+	fmt.Println("parsing...")
 	ctx := Parse(regex)
 	startNFA := ctx.toNFA()
+	fmt.Println("parsed")
 	// fmt.Println(startNFA)
 	currentSteps := []*matchStep{newMatchStep(0, startNFA)}
 	for len(currentSteps) != 0 {
 		nextSteps := make([]*matchStep, 0)
 
 		for _, step := range currentSteps {
-			if step.state.isEnd {
+			if step.state.isEnd && step.index == len(input) {
 				return true
 			}
 
