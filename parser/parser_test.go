@@ -34,12 +34,14 @@ var tests = []struct {
 	{"\\D+", []string{"a", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"}},
 	{".", []string{".", "a", "1", "_", ":", " ", "\n", "\t"}},
 	{"\\.", []string{".", "a", "1", "_", ":", " ", "\n", "\t"}},
+
+	{"a|b|c", []string{"a", "b", "c", "ab"}},
 }
 
 func TestGeneric(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.regex, func(t *testing.T) {
-			compiled, err := regexp.Compile("^" + test.regex + "$")
+			compiled, err := regexp.Compile("^(?:" + test.regex + ")$")
 			if err != nil {
 				t.Errorf("Failed to compile regex: %v", err)
 			}
