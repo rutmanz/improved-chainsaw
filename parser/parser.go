@@ -43,11 +43,8 @@ func newMatchStep(index int, state *nfaState) *matchStep {
 }
 
 func Match(regex, input string) bool {
-	fmt.Println("parsing...")
 	ctx := Parse(regex)
 	startNFA := ctx.toNFA()
-	fmt.Println("parsed")
-	// fmt.Println(startNFA)
 	currentSteps := []*matchStep{newMatchStep(0, startNFA)}
 	for len(currentSteps) != 0 {
 		nextSteps := make([]*matchStep, 0)
@@ -69,8 +66,6 @@ func Match(regex, input string) bool {
 					passes = true
 				}
 				if passes {
-					// fmt.Println("========"+input[step.index:]+"========")
-					// fmt.Println(transition.state.ToString(""))
 					if transition.consumes {
 						nextSteps = append(nextSteps, newMatchStep(step.index+1, transition.state))
 					} else {

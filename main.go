@@ -7,5 +7,6 @@ import (
 )
 
 func main() {
-	fmt.Printf("\nMATCH: %t\n", parser.Match("a{0,3}", "aa"))
+	matched := parser.Match("a|b", "a")
+	fmt.Printf("Matched: %t\n", matched)
 }
